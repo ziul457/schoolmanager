@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SchoolManager - Aluno</title>
+  <link rel="stylesheet" href="styles.css"/>
+
+  <script>
+    // v9 helpers de status -> ícone e classe de card
+    function statusIcon(klass){
+      if(klass==='ok') return '✓';
+      if(klass==='warn') return '!';
+      return '✕';
+    }
+    function cardKlass(klass){ return klass==='ok'?'status-ok':(klass==='warn'?'status-warn':'status-bad'); }
+  </script>
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="container">
+
+    <!-- RESUMO FINAL DAS NOTAS (por disciplina) -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Resumo Final - Notas</h3>
+        <button class="btn" id="btnBoletim">Boletim (PDF)</button>
+      </div>
+      <div id="resumoNotas" class="grid cols-3" style="margin-top:10px"></div>
+      <div class="small">Clique em uma disciplina para ver todas as notas.</div>
+    </div>
+
+    <!-- RESUMO FINAL DA FREQUÊNCIA (por disciplina) -->
+    <div class="card" style="margin-top:16px">
+      <h3 style="margin:0 0 10px">Resumo Final - Frequência</h3>
+      <div id="resumoFreq" class="grid cols-3"></div>
+      <div class="small">Clique em uma disciplina para ver todas as presenças/faltas.</div>
+    </div>
+  </div>
+
+  <!-- MODAL DE DETALHES -->
+  <div class="modal-backdrop" id="modalBk">
+    <div class="modal">
+      <header>
+        <h3 id="modalTitle" style="margin:0"></h3>
+        <button class="close" id="modalClose">Fechar</button>
+      </header>
+      <div class="content" id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    App.guard(['aluno']); App.mountHeader();
+    const user = App.currentUser();
+    const discList = App.disciplinas.list();
+    const discMap = Object.fromEntries(discList.map(d=>[d.id,d.nome]));
+
+    // Helpers de situação, média e frequência (já calculadas em App)
+    
+    function cardNota(did){
+      const media = App.calcMediaAlunoDisciplina(user.id, did);
+      const sit = App.situacaoAlunoDisciplina(user.id, did);
+      const klass = cardKlass(sit.klass);
+      return `<div class="card disc ${klass}" data-type="notas" data-did="${did}" style="cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <strong>${discMap[did]}</strong>
+          <span class="status ${sit.klass}"><span class="icon">${statusIcon(sit.klass)}</span>${sit.status}</span>
+        </div>
+        <div class="small">Média Final: ${media??'-'}</div>
+      </div>`;
+    }
+
+
+    
+    function cardFreq(did){
+      const freq = App.calcFreqAlunoDisciplina(user.id, did);
+      const sit = App.situacaoAlunoDisciplina(user.id, did);
+      const klass = cardKlass(sit.klass);
+      return `<div class="card disc ${klass}" data-type="freq" data-did="${did}" style="cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <strong>${discMap[did]}</strong>
+          <span class="status ${sit.klass}"><span class="icon">${statusIcon(sit.klass)}</span>${sit.status}</span>
+        </div>
+        <div class="progress"><div style="width:${freq}%"></div></div>
+        <div class="small" style="margin-top:6px">Frequência: ${freq}%</div>
+      </div>`;
+    }
+
+
+    // Render dos resumos por disciplina
+    document.getElementById('resumoNotas').innerHTML = discList.map(d=>cardNota(d.id)).join('') || '<div class="alert">Sem disciplinas.</div>';
+    document.getElementById('resumoFreq').innerHTML = discList.map(d=>cardFreq(d.id)).join('') || '<div class="alert">Sem disciplinas.</div>';
+
+    // Modal de detalhes
+    const modalBk = document.getElementById('modalBk');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalContent = document.getElementById('modalContent');
+    function openModal(){ modalBk.style.display='flex'; }
+    function closeModal(){ modalBk.style.display='none'; modalTitle.textContent=''; modalContent.innerHTML=''; }
+    document.getElementById('modalClose').onclick = closeModal;
+    modalBk.addEventListener('click', (e)=>{ if(e.target===modalBk) closeModal(); });
+
+    function openNotasDetalhe(did){
+      const ns = App.notas.listByAluno(user.id).filter(n=>n.disciplinaId===did);
+      modalTitle.textContent = `Notas • ${discMap[did]}`;
+      const rows = ns.map(n=>`<tr><td>${n.avaliacao}</td><td style="text-align:right">${n.valor}</td></tr>`).join('') || '<tr><td colspan="2">Sem notas.</td></tr>';
+      modalContent.innerHTML = `<table class="table"><tr><th>Avaliação</th><th>Nota</th></tr>${rows}</table>`;
+      openModal();
+    }
+    function openFreqDetalhe(did){
+      const ps = App.presencas.listByAluno(user.id).filter(p=>p.disciplinaId===did);
+      const rows = ps.map(p=>`<tr><td>${p.dataISO}</td><td>${p.status}${p.justificativa? ' ('+p.justificativa.status+')':''}</td></tr>`).join('') || '<tr><td colspan="2">Sem registros.</td></tr>';
+      modalTitle.textContent = `Frequência • ${discMap[did]}`;
+      modalContent.innerHTML = `<table class="table"><tr><th>Data</th><th>Status</th></tr>${rows}</table>`;
+      openModal();
+    }
+
+    // Click handlers nos cards
+    function wireClicks(){
+      document.querySelectorAll('.card.disc').forEach(c=>{
+        c.addEventListener('click', ()=>{
+          const did = c.getAttribute('data-did');
+          const t = c.getAttribute('data-type');
+          if(t==='notas') openNotasDetalhe(did); else openFreqDetalhe(did);
+        });
+      });
+    }
+    wireClicks();
+
+    // Boletim PDF (mantido)
+    document.getElementById('btnBoletim').onclick = ()=> App.openBoletimAlunoPrint(user.id);
+
+  </script>
+</body>
+</html>

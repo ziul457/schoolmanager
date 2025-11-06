@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SchoolManager - Disciplinas</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="container">
+    <div class="grid cols-2">
+      <div class="card">
+        <h3 style="margin:0 0 10px">Cadastrar Disciplina</h3>
+        <form id="discForm" class="grid">
+          <div><label>Nome</label><input name="nome" required/></div>
+          <button class="btn" type="submit">Salvar</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 10px">Disciplinas</h3>
+        <table class="table" id="discTable"></table>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    App.guard(['admin']); App.mountHeader();
+    const table = document.getElementById('discTable');
+    function draw(){
+      const rows = App.disciplinas.list().map(d=>`
+        <tr><td>${d.nome}</td>
+        <td style="text-align:right"><button class="btn ghost del" data-id="${d.id}">Excluir</button></td></tr>`).join('');
+      table.innerHTML = `<tr><th>Nome</th><th></th></tr>${rows}`;
+      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.disciplinas.remove(b.dataset.id); draw(); });
+    }
+    document.getElementById('discForm').onsubmit=(e)=>{ e.preventDefault(); const d=new FormData(e.target); App.disciplinas.create(Object.fromEntries(d.entries())); e.target.reset(); draw(); };
+    draw();
+  </script>
+</body>
+</html>

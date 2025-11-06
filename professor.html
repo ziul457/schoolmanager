@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SchoolManager - Professor</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="container grid cols-2">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0 0 10px">Lançar Nota</h3>
+        <div class="small">Professor só lança na própria matéria.</div>
+      </div>
+      <form id="notaForm" class="grid cols-2">
+        <div><label>Turma</label><select name="turmaId" id="turmaNotaSel"></select></div>
+        <div><label>Disciplina</label><input id="discNota" disabled/></div>
+        <div><label>Aluno</label><select name="alunoId" id="alunoNotaSel"></select></div>
+        <div><label>Avaliação</label><input name="avaliacao" id="avaliacao" required/></div>
+        <div><label>Nota</label><input name="valor" id="valor" type="number" min="0" max="10" step="0.1" required/></div>
+        <button class="btn" type="submit">Lançar</button>
+      </form>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn ghost" id="btnCSVNotas">Exportar Notas (CSV)</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0 0 10px">Marcar Presença (em lote)</h3>
+        <div class="small">P/F por aluno • Justificativas no painel</div>
+      </div>
+      <form id="presForm" class="grid">
+        <div class="grid cols-3">
+          <div><label>Turma</label><select id="turmaPresSel"></select></div>
+          <div><label>Disciplina</label><input id="discPres" disabled/></div>
+          <div><label>Data</label><input id="dataPres" type="date" required/></div>
+        </div>
+        <div id="listaAlunos" class="card" style="max-height:300px;overflow:auto"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" type="submit">Salvar Presenças</button>
+          <button class="btn ghost" type="button" id="btnCSVPres">Exportar Presenças (CSV)</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="grid-column:1/-1">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0 0 10px">Justificativas de Faltas (pendentes)</h3>
+        <div class="small">Aprovar ou Recusar</div>
+      </div>
+      <div id="justList"></div>
+    </div>
+
+    <div class="card" style="grid-column:1/-1">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0 0 10px">Boletins</h3>
+        <div class="small">Gere PDF da turma</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:end">
+        <div><label>Turma</label><select id="turmaBoletimSel"></select></div>
+        <div><label>Disciplina (opcional)</label><select id="discBoletimSel"><option value="">Todas</option></select></div>
+        <button class="btn" id="btnBoletimTurma">Boletim da Turma (PDF)</button>
+      </div>
+    </div>
+
+    <div class="card" style="grid-column:1/-1">
+      <h3 style="margin:0 0 10px">Últimas Notas & Presenças</h3>
+      <div id="recent"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    App.guard(['prof']); App.mountHeader();
+    const user = App.currentUser();
+    const profDiscId = user.disciplinaId;
+    const discMap = Object.fromEntries(App.disciplinas.list().map(d=>[d.id,d.nome]));
+    document.getElementById('discNota').value = discMap[profDiscId]||'-';
+    document.getElementById('discPres').value = discMap[profDiscId]||'-';
+
+    // Turmas visíveis = turmas do professor (se definidas), senão todas
+    const allTurmas = App.turmas.list();
+    const visTurmas = (user.profTurmas && user.profTurmas.length) ? allTurmas.filter(t=>user.profTurmas.includes(t.id)) : allTurmas;
+
+    // Preencher selects
+    const turmaNotaSel = document.getElementById('turmaNotaSel');
+    const turmaPresSel = document.getElementById('turmaPresSel');
+    const turmaBoletimSel = document.getElementById('turmaBoletimSel');
+    [turmaNotaSel,turmaPresSel,turmaBoletimSel].forEach(sel=> sel.innerHTML = visTurmas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('') );
+    const discBoletimSel = document.getElementById('discBoletimSel');
+    discBoletimSel.innerHTML += Object.entries(discMap).map(([id,n])=>`<option value="${id}">${n}</option>`).join('');
+
+    // Notas: update alunos when turma changes
+    const alunoNotaSel = document.getElementById('alunoNotaSel');
+    function refreshAlunosNota(){
+      const turmaId = turmaNotaSel.value;
+      const alunos = App.alunosByTurma(turmaId);
+      alunoNotaSel.innerHTML = alunos.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+    }
+    turmaNotaSel.onchange = refreshAlunosNota; refreshAlunosNota();
+
+    document.getElementById('notaForm').onsubmit=(e)=>{
+      e.preventDefault();
+      const turmaId = turmaNotaSel.value;
+      const alunoId = alunoNotaSel.value;
+      const avaliacao = document.getElementById('avaliacao').value;
+      const valor = Number(document.getElementById('valor').value);
+      App.notas.create({ profId:user.id, alunoId, turmaId, disciplinaId: profDiscId, avaliacao, valor });
+      e.target.reset(); refreshAlunosNota(); drawRecent();
+      App.toast('Nota lançada!','ok');
+    };
+
+    // Presenças em lote
+    const listaAlunosDiv = document.getElementById('listaAlunos');
+    function renderListaAlunos(){
+      const turmaId = turmaPresSel.value;
+      const alunos = App.alunosByTurma(turmaId);
+      if(!alunos.length){ listaAlunosDiv.innerHTML = '<div class="alert">Sem alunos nesta turma.</div>'; return; }
+      listaAlunosDiv.innerHTML = `<table class="table">
+        <tr><th>Aluno</th><th style="width:120px;text-align:center">P</th><th style="width:120px;text-align:center">F</th></tr>
+        ${alunos.map(a=>`
+          <tr>
+            <td>${a.name}</td>
+            <td style="text-align:center"><input type="radio" name="pres_${a.id}" value="P" checked></td>
+            <td style="text-align:center"><input type="radio" name="pres_${a.id}" value="F"></td>
+          </tr>`).join('')}
+      </table>`;
+    }
+    turmaPresSel.onchange = renderListaAlunos; renderListaAlunos();
+
+    document.getElementById('presForm').onsubmit=(e)=>{
+      e.preventDefault();
+      const turmaId = turmaPresSel.value;
+      const dataISO = document.getElementById('dataPres').value;
+      if(!dataISO){ App.toast('Informe a data.','warn'); return; }
+      const alunos = App.alunosByTurma(turmaId);
+      const lista = alunos.map(a=>{
+        const radios = document.getElementsByName('pres_'+a.id);
+        let val='P'; for(const r of radios){ if(r.checked) val=r.value; }
+        return { alunoId:a.id, turmaId, disciplinaId: profDiscId, dataISO, status: val };
+      });
+      App.presencas.marcarBatch(lista);
+      App.toast('Presenças salvas!','ok');
+      drawRecent();
+    };
+
+    // Export CSV
+    document.getElementById('btnCSVNotas').onclick = ()=> App.exportCSVNotas(turmaNotaSel.value, profDiscId);
+    document.getElementById('btnCSVPres').onclick = ()=> App.exportCSVPresencas(turmaPresSel.value, profDiscId);
+
+    // Justificativas pendentes (da disciplina e turmas do professor)
+    function drawJustificativas(){
+      const pres = App.presencas.list().filter(p=> p.disciplinaId===profDiscId && (!user.profTurmas || user.profTurmas.includes(p.turmaId)));
+      const pend = pres.filter(p=> p.status==='F' && p.justificativa && p.justificativa.status==='pendente');
+      if(!pend.length){ document.getElementById('justList').innerHTML = '<div class="alert">Sem pendências.</div>'; return; }
+      const users = Object.fromEntries(App.listUsers().map(u=>[u.id,u.name]));
+      document.getElementById('justList').innerHTML = `<table class="table">
+        <tr><th>Aluno</th><th>Data</th><th>Motivo</th><th>Ação</th></tr>
+        ${pend.map(p=>`
+          <tr>
+            <td>${users[p.alunoId]||'?'}</td>
+            <td>${p.dataISO}</td>
+            <td>${p.justificativa.motivo}</td>
+            <td>
+              <button class="btn" data-id="${p.id}" data-act="aprovar">Aprovar</button>
+              <button class="btn ghost" data-id="${p.id}" data-act="recusar">Recusar</button>
+            </td>
+          </tr>`).join('')}
+      </table>`;
+      document.querySelectorAll('#justList button').forEach(b=> b.onclick = ()=>{
+        App.presencas.decidirJustificativa(b.dataset.id, b.dataset.act);
+        drawJustificativas(); drawRecent();
+      });
+    }
+
+    // Boletim da turma
+    document.getElementById('btnBoletimTurma').onclick = ()=> {
+      const turmaId = turmaBoletimSel.value;
+      const did = discBoletimSel.value||null;
+      App.openBoletimTurmaPrint(turmaId, did);
+    };
+
+    function drawRecent(){
+      const ns = App.notas.list().slice(-5).reverse();
+      const ps = App.presencas.list().slice(-5).reverse();
+      const mapUser = Object.fromEntries(App.listUsers().map(u=>[u.id,u]));
+      const mapDisc = discMap;
+      document.getElementById('recent').innerHTML = `
+        <div class="grid cols-2">
+          <div><h4>Notas</h4><table class="table"><tr><th>Aluno</th><th>Disciplina</th><th>Aval.</th><th>Nota</th></tr>
+            ${ns.map(n=>`<tr><td>${mapUser[n.alunoId]?.name||'?'}</td><td>${mapDisc[n.disciplinaId]||'?'}</td><td>${n.avaliacao}</td><td>${n.valor}</td></tr>`).join('')||'<tr><td colspan="4">Sem registros.</td></tr>'}
+          </table></div>
+          <div><h4>Presenças</h4><table class="table"><tr><th>Aluno</th><th>Disciplina</th><th>Data</th><th>Status</th></tr>
+            ${ps.map(p=>`<tr><td>${mapUser[p.alunoId]?.name||'?'}</td><td>${mapDisc[p.disciplinaId]||'?'}</td><td>${p.dataISO}</td><td>${p.status}${p.justificativa? ' ('+p.justificativa.status+')':''}</td></tr>`).join('')||'<tr><td colspan="4">Sem registros.</td></tr>'}
+          </table></div>
+        </div>`;
+    }
+    drawRecent(); drawJustificativas();
+  </script>
+</body>
+</html>

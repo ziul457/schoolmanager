@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SchoolManager - Usuários</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="container">
+    <div class="card">
+      <h3 style="margin:0 0 10px">Cadastrar Usuário</h3>
+      <form id="userForm" class="grid cols-3">
+        <div><label>Nome</label><input name="name" required/></div>
+        <div><label>E-mail</label><input name="email" type="email" required/></div>
+        <div><label>Senha</label><input name="password" type="text" required/></div>
+        <div>
+          <label>Perfil</label>
+          <select name="role" id="roleSel">
+            <option value="aluno">Aluno</option>
+            <option value="prof">Professor</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+        <div id="turmaBox" style="display:block">
+          <label>Turma do Aluno</label>
+          <select name="turmaId" id="turmaSel"></select>
+        </div>
+        <div id="discBox" style="display:none">
+          <label>Matéria do Professor</label>
+          <select name="disciplinaId" id="discSel"></select>
+        </div>
+        <div id="turmasProfBox" style="display:none">
+          <label>Turmas do Professor (Ctrl/Cmd para multi)</label>
+          <select name="profTurmas" id="profTurmasSel" multiple></select>
+        </div>
+        <button class="btn" type="submit">Salvar</button>
+      </form>
+      <div class="small">* Alunos: matrícula automática na turma. * Professores: defina matéria e as turmas que leciona.</div>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 10px">Usuários</h3>
+      <table class="table" id="userTable"></table>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    App.guard(['admin']); App.mountHeader();
+    const table = document.getElementById('userTable');
+    const form = document.getElementById('userForm');
+    const roleSel = document.getElementById('roleSel');
+    const turmaBox = document.getElementById('turmaBox');
+    const discBox = document.getElementById('discBox');
+    const turmaSel = document.getElementById('turmaSel');
+    const discSel = document.getElementById('discSel');
+    const profTurmasBox = document.getElementById('turmasProfBox');
+    const profTurmasSel = document.getElementById('profTurmasSel');
+
+    function fillOptions(){
+      const turmas = App.turmas.list();
+      turmaSel.innerHTML = turmas.map(t=>`<option value="${t.id}">${t.nome} - ${t.turno}</option>`).join('');
+      profTurmasSel.innerHTML = turmas.map(t=>`<option value="${t.id}">${t.nome} - ${t.turno}</option>`).join('');
+      discSel.innerHTML = App.disciplinas.list().map(d=>`<option value="${d.id}">${d.nome}</option>`).join('');
+    }
+    fillOptions();
+
+    roleSel.onchange = () => {
+      turmaBox.style.display = roleSel.value==='aluno' ? 'block':'none';
+      discBox.style.display = roleSel.value==='prof' ? 'block':'none';
+      profTurmasBox.style.display = roleSel.value==='prof' ? 'block':'none';
+    };
+
+    function draw(){
+      const discMap = Object.fromEntries(App.disciplinas.list().map(d=>[d.id,d.nome]));
+      const turmaMap = Object.fromEntries(App.turmas.list().map(t=>[t.id, t.nome]));
+      const rows = App.listUsers().map(u=>{
+        let extra='';
+        if(u.role==='aluno'){
+          const turmaId = App.getTurmaOfAluno(u.id);
+          extra = turmaId ? ` • Turma: ${turmaMap[turmaId]||'-'}` : '';
+        } else if(u.role==='prof'){
+          const turmas = (u.profTurmas||[]).map(id=>turmaMap[id]||id).join(', ') || '-';
+          extra = ` • Matéria: ${discMap[u.disciplinaId]||'-'} • Turmas: ${turmas}`;
+        }
+        return `<tr>
+          <td style="width:40%">${u.name}<div class="small">${u.email}</div></td>
+          <td style="width:20%">${u.role}${extra}</td>
+          <td style="width:20%"><input data-id="${u.id}" class="pw" value="${u.password}"/></td>
+          <td style="width:20%"><button class="btn ghost del" data-id="${u.id}">Excluir</button></td>
+        </tr>`;
+      }).join('');
+      table.innerHTML = `<tr><th>Nome</th><th>Perfil</th><th>Senha</th><th>Ações</th></tr>${rows||''}`;
+      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.deleteUser(b.dataset.id); draw(); });
+      document.querySelectorAll('.pw').forEach(i=>i.onchange=()=>{ App.updateUser(i.dataset.id, { password:i.value }); });
+    }
+
+    form.onsubmit = (e)=>{
+      e.preventDefault();
+      const dataObj = Object.fromEntries(new FormData(form).entries());
+      // multi select values
+      if(roleSel.value==='prof'){
+        dataObj.profTurmas = Array.from(profTurmasSel.selectedOptions).map(o=>o.value);
+        if(!dataObj.disciplinaId){ alert('Selecione a matéria do professor.'); return; }
+      }
+      if(roleSel.value==='aluno' && !dataObj.turmaId){ alert('Selecione a turma do aluno.'); return; }
+      App.createUser(dataObj);
+      form.reset(); fillOptions(); draw();
+    };
+
+    draw();
+  </script>
+</body>
+</html>

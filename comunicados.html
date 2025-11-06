@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SchoolManager - Comunicados</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="container">
+    <div id="pubBox" class="card" style="display:none">
+      <h3 style="margin:0 0 10px">Publicar Comunicado</h3>
+      <form id="pubForm" class="grid">
+        <div><label>Título</label><input name="titulo" required/></div>
+        <div><label>Mensagem</label><textarea name="corpo" rows="4" required></textarea></div>
+        <button class="btn" type="submit">Publicar</button>
+      </form>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 10px">Comunicados</h3>
+      <div id="feed" class="grid"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    App.guard(['admin','prof','aluno']); App.mountHeader();
+    const user = App.currentUser();
+    const pubBox = document.getElementById('pubBox');
+    if(user.role==='admin' || user.role==='prof'){ pubBox.style.display='block'; }
+    function draw(){
+      const list = App.comunicados.list();
+      document.getElementById('feed').innerHTML = list.map(c=>`
+        <article class="card">
+          <div style="display:flex;justify-content:space-between;gap:10px">
+            <h4 style="margin:0">${c.titulo}</h4>
+            <span class="badge">${new Date(c.dataISO).toLocaleString()}</span>
+          </div>
+          <p style="margin:.5rem 0">${c.corpo}</p>
+        </article>`).join('') || '<div class="alert">Sem comunicados.</div>';
+    }
+    document.getElementById('pubForm')?.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const f=new FormData(e.target);
+      App.comunicados.publicar({ autorId:user.id, titulo:f.get('titulo'), corpo:f.get('corpo') });
+      e.target.reset(); App.toast('Comunicado publicado.','ok'); draw();
+    });
+    draw();
+  </script>
+</body>
+</html>

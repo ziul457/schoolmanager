@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SchoolManager - Login</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="container" style="max-width:520px;margin-top:8vh">
+    <div class="brand" style="margin-bottom:12px"><span class="logo"></span><span style="font-size:22px">SchoolManager</span></div>
+    <div class="hero"><h1>Bem-vindo!</h1><p>Gerencie turmas, notas e presenças com um visual mais vibrante.</p></div>
+    <div class="card">
+      <h2 style="margin:0 0 8px">Entrar</h2>
+      <p style="margin-top:0;color:#555">Use: <code>admin@school.local / admin123</code>, <code>ana@school.local / prof123</code>, <code>carlos@school.local / aluno123</code></p>
+      <form id="loginForm" class="grid" style="gap:12px">
+        <div><label for="email">E-mail</label><input id="email" name="email" type="email" required placeholder="voce@escola.com"/></div>
+        <div><label for="password">Senha</label><input id="password" name="password" type="password" required placeholder="••••••••"/></div>
+        <button class="btn" type="submit">Acessar</button>
+        
+      </form>
+    </div>
+    <div class="footer">Tema branco e vermelho • SchoolManager</div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    (function(){
+      const form = document.getElementById('loginForm');
+      form.addEventListener('submit', function(e){
+        e.preventDefault();
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const user = App.signIn(email, password);
+        if(!user){ alert('Credenciais inválidas'); return; }
+        if(user.role==='admin') location.href='admin.html';
+        else if(user.role==='prof') location.href='professor.html';
+        else location.href='aluno.html';
+      });
+            const u = App.currentUser(); if(u){ location.href = (u.role==='admin'?'admin.html':(u.role==='prof'?'professor.html':'aluno.html')); }
+    })();
+  </script>
+</body>
+</html>
