@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Comunicados</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
@@ -22,7 +25,7 @@
       <div id="feed" class="grid"></div>
     </div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['admin','prof','aluno']); App.mountHeader();
     const user = App.currentUser();
@@ -46,6 +49,7 @@
       e.target.reset(); App.toast('Comunicado publicado.','ok'); draw();
     });
     draw();
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>

@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Disciplinas</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
@@ -23,7 +26,7 @@
       </div>
     </div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['admin']); App.mountHeader();
     const table = document.getElementById('discTable');
@@ -32,10 +35,11 @@
         <tr><td>${d.nome}</td>
         <td style="text-align:right"><button class="btn ghost del" data-id="${d.id}">Excluir</button></td></tr>`).join('');
       table.innerHTML = `<tr><th>Nome</th><th></th></tr>${rows}`;
-      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.disciplinas.remove(b.dataset.id); draw(); });
+      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.disciplinas.remove(b.dataset.id); App.toast('Disciplina removida','ok'); draw(); });
     }
-    document.getElementById('discForm').onsubmit=(e)=>{ e.preventDefault(); const d=new FormData(e.target); App.disciplinas.create(Object.fromEntries(d.entries())); e.target.reset(); draw(); };
+    document.getElementById('discForm').onsubmit=(e)=>{ e.preventDefault(); const d=new FormData(e.target); App.disciplinas.create(Object.fromEntries(d.entries())); e.target.reset(); App.toast('Disciplina criada','ok'); draw(); };
     draw();
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>

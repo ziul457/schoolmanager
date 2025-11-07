@@ -3,24 +3,16 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Aluno</title>
-  <link rel="stylesheet" href="styles.css"/>
-
-  <script>
-    // v9 helpers de status -> ícone e classe de card
-    function statusIcon(klass){
-      if(klass==='ok') return '✓';
-      if(klass==='warn') return '!';
-      return '✕';
-    }
-    function cardKlass(klass){ return klass==='ok'?'status-ok':(klass==='warn'?'status-warn':'status-bad'); }
-  </script>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
   <div class="container">
 
-    <!-- RESUMO FINAL DAS NOTAS (por disciplina) -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h3 style="margin:0">Resumo Final - Notas</h3>
@@ -30,7 +22,6 @@
       <div class="small">Clique em uma disciplina para ver todas as notas.</div>
     </div>
 
-    <!-- RESUMO FINAL DA FREQUÊNCIA (por disciplina) -->
     <div class="card" style="margin-top:16px">
       <h3 style="margin:0 0 10px">Resumo Final - Frequência</h3>
       <div id="resumoFreq" class="grid cols-3"></div>
@@ -38,7 +29,6 @@
     </div>
   </div>
 
-  <!-- MODAL DE DETALHES -->
   <div class="modal-backdrop" id="modalBk">
     <div class="modal">
       <header>
@@ -49,15 +39,16 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['aluno']); App.mountHeader();
     const user = App.currentUser();
     const discList = App.disciplinas.list();
     const discMap = Object.fromEntries(discList.map(d=>[d.id,d.nome]));
 
-    // Helpers de situação, média e frequência (já calculadas em App)
-    
+    function statusIcon(klass){ if(klass==='ok') return '✓'; if(klass==='warn') return '!'; return '✕'; }
+    function cardKlass(klass){ return klass==='ok'?'status-ok':(klass==='warn'?'status-warn':'status-bad'); }
+
     function cardNota(did){
       const media = App.calcMediaAlunoDisciplina(user.id, did);
       const sit = App.situacaoAlunoDisciplina(user.id, did);
@@ -71,8 +62,6 @@
       </div>`;
     }
 
-
-    
     function cardFreq(did){
       const freq = App.calcFreqAlunoDisciplina(user.id, did);
       const sit = App.situacaoAlunoDisciplina(user.id, did);
@@ -87,12 +76,9 @@
       </div>`;
     }
 
-
-    // Render dos resumos por disciplina
     document.getElementById('resumoNotas').innerHTML = discList.map(d=>cardNota(d.id)).join('') || '<div class="alert">Sem disciplinas.</div>';
     document.getElementById('resumoFreq').innerHTML = discList.map(d=>cardFreq(d.id)).join('') || '<div class="alert">Sem disciplinas.</div>';
 
-    // Modal de detalhes
     const modalBk = document.getElementById('modalBk');
     const modalTitle = document.getElementById('modalTitle');
     const modalContent = document.getElementById('modalContent');
@@ -110,13 +96,12 @@
     }
     function openFreqDetalhe(did){
       const ps = App.presencas.listByAluno(user.id).filter(p=>p.disciplinaId===did);
-      const rows = ps.map(p=>`<tr><td>${p.dataISO}</td><td>${p.status}${p.justificativa? ' ('+p.justificativa.status+')':''}</td></tr>`).join('') || '<tr><td colspan="2">Sem registros.</td></tr>';
+      const rows = ps.map(p=>`<tr><td>${p.dataISO}</td><td>${p.status}</td></tr>`).join('') || '<tr><td colspan="2">Sem registros.</td></tr>';
       modalTitle.textContent = `Frequência • ${discMap[did]}`;
       modalContent.innerHTML = `<table class="table"><tr><th>Data</th><th>Status</th></tr>${rows}</table>`;
       openModal();
     }
 
-    // Click handlers nos cards
     function wireClicks(){
       document.querySelectorAll('.card.disc').forEach(c=>{
         c.addEventListener('click', ()=>{
@@ -128,9 +113,8 @@
     }
     wireClicks();
 
-    // Boletim PDF (mantido)
     document.getElementById('btnBoletim').onclick = ()=> App.openBoletimAlunoPrint(user.id);
-
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>

@@ -3,33 +3,35 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Login</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div class="container" style="max-width:520px;margin-top:8vh">
     <div class="brand" style="margin-bottom:12px"><span class="logo"></span><span style="font-size:22px">SchoolManager</span></div>
-    <div class="hero"><h1>Bem-vindo!</h1><p>Gerencie turmas, notas e presenças com um visual mais vibrante.</p></div>
-    <div class="card">
+    <div class="hero"><h1>Bem-vindo!</h1><p>Gerencie turmas, notas e presenças com visual vibrante e dados no IndexedDB.</p></div>
+    <div class="card fade-in">
       <h2 style="margin:0 0 8px">Entrar</h2>
-     <div class="alert" style="margin:8px 0 12px">
-  <strong>Perfis de teste:</strong>
-  <ul style="margin:8px 0 0 18px; padding:0">
-    <li><strong>Professor:</strong> ana@school.local / prof123</li>
-    <li><strong>Aluno:</strong> carlos@school.local / aluno123</li>
-    <li><strong>Coordenador:</strong> admin@school.local / admin123</li>
-  </ul>
-</div>
+      <div class="alert" style="margin:8px 0 12px">
+        <strong>Perfis de teste:</strong>
+        <ul style="margin:8px 0 0 18px; padding:0">
+          <li><strong>Professor:</strong> ana@school.local / prof123</li>
+          <li><strong>Aluno:</strong> carlos@school.local / aluno123</li>
+          <li><strong>Coordenador:</strong> admin@school.local / admin123</li>
+        </ul>
+      </div>
       <form id="loginForm" class="grid" style="gap:12px">
         <div><label for="email">E-mail</label><input id="email" name="email" type="email" required placeholder="voce@escola.com"/></div>
         <div><label for="password">Senha</label><input id="password" name="password" type="password" required placeholder="••••••••"/></div>
         <button class="btn" type="submit">Acessar</button>
-        
       </form>
     </div>
-    <div class="footer">Tema branco e vermelho • SchoolManager</div>
+    <div class="footer">Tema branco e vermelho com toques vibrantes • IndexedDB persistente</div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     (function(){
       const form = document.getElementById('loginForm');
@@ -38,12 +40,26 @@
         const email = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
         const user = App.signIn(email, password);
-        if(!user){ alert('Credenciais inválidas'); return; }
-        if(user.role==='admin') location.href='admin.html';
-        else if(user.role==='prof') location.href='professor.html';
-        else location.href='aluno.html';
+        if(!user){ App.toast('Credenciais inválidas','bad'); return; }
+        (async ()=>{
+          try {
+            // Persiste no IDB antes de sair (defensivo)
+            const s = localStorage.getItem('schoolmanager_db_v16_1');
+            const req = indexedDB.open('schoolmanager_idb', 1);
+            const db = await new Promise((res,rej)=>{
+              req.onupgradeneeded=()=>{ try{ req.result.createObjectStore('kv'); }catch(e){} };
+              req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error);
+            });
+            await new Promise((res,rej)=>{
+              const tx=db.transaction('kv','readwrite').objectStore('kv').put(s,'schoolmanager_db_v16_1');
+              tx.onsuccess=()=>res(); tx.onerror=()=>rej(tx.error);
+            });
+          }catch(e){}
+          location.href = (user.role==='admin'?'admin.html':(user.role==='prof'?'professor.html':'aluno.html'));
+        })();
       });
-            const u = App.currentUser(); if(u){ location.href = (u.role==='admin'?'admin.html':(u.role==='prof'?'professor.html':'aluno.html')); }
+      const u = App.currentUser(); if(u){ location.href = (u.role==='admin'?'admin.html':(u.role==='prof'?'professor.html':'aluno.html')); }
+      window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
     })();
   </script>
 </body>

@@ -1,6 +1,7 @@
 (function(){
-  const dbKey = "schoolmanager_db_v7";
-  const RULES = { mediaMin: 6.0, freqMin: 75 }; // >=6.0 e >=75%
+  const dbKey = "schoolmanager_db_v16_1";
+  const RULES = { mediaMin: 6.0, freqMin: 75 };
+
   const initialData = {
     users: [
       { id: "u1", role: "admin", name: "Admin Master", email: "admin@school.local", password: "admin123" },
@@ -19,10 +20,9 @@
     matriculas: [],
     notas: [], presencas: [],
     comunicados: [{ id: "c1", autorId: "u2", titulo: "Bem-vindos!", corpo: "Aulas começam dia 05/02.", dataISO: new Date().toISOString() }],
-    session: null
+    session: null,
+    updatedAt: Date.now() // importante para resolver corrida de cache
   };
-
-  // seed matriculas from users with turmaIdSeed
   initialData.users.forEach(u=>{ if(u.role==='aluno' && u.turmaIdSeed){ initialData.matriculas.push({ id:'m'+Math.random().toString(16).slice(2), alunoId:u.id, turmaId:u.turmaIdSeed }); delete u.turmaIdSeed; } });
 
   function getDB(){
@@ -30,12 +30,82 @@
     if(!raw){ localStorage.setItem(dbKey, JSON.stringify(initialData)); return JSON.parse(JSON.stringify(initialData)); }
     try{ return JSON.parse(raw); } catch(e){ localStorage.setItem(dbKey, JSON.stringify(initialData)); return JSON.parse(JSON.stringify(initialData)); }
   }
-  function setDB(db){ localStorage.setItem(dbKey, JSON.stringify(db)); }
+  function setDB(db){
+    db.updatedAt = Date.now(); // marca data de atualização
+    const s = JSON.stringify(db);
+    localStorage.setItem(dbKey, s);
+    idbSet(IDB_KEY, s).catch(err=>console.warn('Falha ao gravar no IDB', err));
+  }
   function uid(p){ return p+Math.random().toString(16).slice(2); }
+
+  // ===== IndexedDB adapter + boot sync =====
+  const IDB_NAME = 'schoolmanager_idb';
+  const IDB_STORE = 'kv';
+  const IDB_KEY = dbKey;
+
+  function idbOpen(){
+    return new Promise((res,rej)=>{
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => { try{ req.result.createObjectStore(IDB_STORE); }catch(e){} };
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  async function idbGet(key){
+    const db = await idbOpen();
+    return new Promise((res,rej)=>{
+      const tx = db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(key);
+      tx.onsuccess = () => res(tx.result||null);
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+  async function idbSet(key, val){
+    const db = await idbOpen();
+    return new Promise((res,rej)=>{
+      const tx = db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(val, key);
+      tx.onsuccess = () => res(true);
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  // Boot: escolher sempre o estado mais novo e preservar sessão
+  (async function bootIDB(){
+    try{
+      const localRaw = localStorage.getItem(dbKey);
+      const fromLocal = localRaw ? JSON.parse(localRaw) : null;
+      const fromIDB = await idbGet(IDB_KEY);
+      const parsedIDB = fromIDB ? JSON.parse(fromIDB) : null;
+
+      const pickNewest = (a,b)=>{
+        if(a && b){
+          const au = a.updatedAt || 0, bu = b.updatedAt || 0;
+          return au >= bu ? a : b;
+        }
+        return a || b || null;
+      };
+
+      let chosen = pickNewest(fromLocal, parsedIDB) || initialData;
+
+      // Se local tinha sessão e o escolhido não, preserve a sessão
+      if(fromLocal?.session && !chosen.session){
+        chosen.session = fromLocal.session;
+        chosen.updatedAt = Date.now();
+      }
+
+      // Persistir escolhido nos dois
+      const s = JSON.stringify(chosen);
+      localStorage.setItem(dbKey, s);
+      await idbSet(IDB_KEY, s);
+    }catch(e){
+      console.warn('IndexedDB indisponível, usando somente localStorage', e);
+      if(!localStorage.getItem(dbKey)){
+        localStorage.setItem(dbKey, JSON.stringify(initialData));
+      }
+    }
+  })();
 
   const A = {
     RULES,
-    resetDB(){ localStorage.removeItem(dbKey); getDB(); },
     signIn(email, password){
       const db=getDB();
       const u=db.users.find(x=>x.email===email && x.password===password);
@@ -43,7 +113,10 @@
       db.session={ userId:u.id, ts:Date.now() };
       setDB(db); return u;
     },
-    signOut(){ const db=getDB(); db.session=null; setDB(db); },
+    signOut(){
+      const db=getDB(); db.session=null; setDB(db);
+      try{ sessionStorage.clear(); }catch(e){}
+    },
     currentUser(){ const db=getDB(); if(!db.session) return null; return db.users.find(u=>u.id===db.session.userId)||null; },
     listUsers(){ return getDB().users; },
     getTurmaOfAluno(alunoId){
@@ -56,7 +129,6 @@
     },
     createUser(u){
       const db=getDB(); u.id=uid('u'); 
-      // normalize profTurmas
       if(u.role==='prof' && u.profTurmas && !Array.isArray(u.profTurmas)){ u.profTurmas=[u.profTurmas]; }
       db.users.push(u);
       if(u.role==='aluno' && u.turmaId){
@@ -93,35 +165,21 @@
         setDB(db);
       } },
     matriculas: { list(){ return getDB().matriculas; } },
-    notas: {
-      list(){ return getDB().notas; },
-      create(n){ const db=getDB(); n.id=uid('n'); db.notas.push(n); setDB(db); return n; },
-      listByAluno(id){ return getDB().notas.filter(n=>n.alunoId===id); }
-    },
+    notas: { list(){ return getDB().notas; }, create(n){ const db=getDB(); n.id=uid('n'); db.notas.push(n); setDB(db); return n; }, listByAluno(id){ return getDB().notas.filter(n=>n.alunoId===id); } },
     presencas: {
       list(){ return getDB().presencas; },
-      marcarBatch(lista){ const db=getDB(); for(const p of lista){ db.presencas.push({ id:uid('p'), justificativa:null, ...p }); } setDB(db); },
-      marcar(p){ const db=getDB(); p.id=uid('p'); p.justificativa=null; db.presencas.push(p); setDB(db); return p; },
+      marcarBatch(lista){ const db=getDB(); for(const p of lista){ db.presencas.push({ id:uid('p'), ...p }); } setDB(db); },
+      marcar(p){ const db=getDB(); p.id=uid('p'); db.presencas.push(p); setDB(db); return p; },
       listByAluno(id){ return getDB().presencas.filter(p=>p.alunoId===id); },
       resumoPorDisciplina(alunoId){
         const db=getDB();
         const porDisc = {};
         for(const p of db.presencas.filter(x=>x.alunoId===alunoId)){
           if(!porDisc[p.disciplinaId]) porDisc[p.disciplinaId]={P:0,F:0,total:0};
-          const faltaJust = (p.status==='F' && p.justificativa && p.justificativa.status==='aprovada');
-          if(p.status==='P' || faltaJust) porDisc[p.disciplinaId].P++; else porDisc[p.disciplinaId].F++;
+          if(p.status==='P') porDisc[p.disciplinaId].P++; else porDisc[p.disciplinaId].F++;
           porDisc[p.disciplinaId].total++;
         }
         return porDisc;
-      },
-      justificar(presencaId, alunoId, motivo){
-        const db=getDB(); const i=db.presencas.findIndex(x=>x.id===presencaId && x.alunoId===alunoId);
-        if(i<0) return null; db.presencas[i].justificativa={motivo,status:'pendente',dataISO:new Date().toISOString()}; setDB(db); return db.presencas[i];
-      },
-      decidirJustificativa(presencaId, status){
-        const db=getDB(); const i=db.presencas.findIndex(x=>x.id===presencaId);
-        if(i<0) return null; if(!db.presencas[i].justificativa) return null;
-        db.presencas[i].justificativa.status=status; db.presencas[i].justificativa.decisoEm=new Date().toISOString(); setDB(db); return db.presencas[i];
       }
     },
     comunicados: { list(){ return getDB().comunicados.sort((a,b)=>new Date(b.dataISO)-new Date(a.dataISO)); },
@@ -157,8 +215,8 @@
       const roleName = u ? (u.role==='admin'?'Administrador':u.role==='prof'?'Professor':'Aluno') : '';
       const menus = {
         admin:[['admin.html','Dashboard'],['usuarios.html','Usuários'],['turmas.html','Turmas'],['disciplinas.html','Disciplinas'],['comunicados.html','Comunicados']],
-        prof:[['professor.html','Dashboard'],['notas.html','Notas'],['presencas.html','Presenças'],['comunicados.html','Comunicados']],
-        aluno:[['aluno.html','Minha Área'],['notas.html','Minhas Notas'],['presencas.html','Minhas Presenças'],['comunicados.html','Comunicados']]
+        prof:[['professor.html','Dashboard'],['comunicados.html','Comunicados']],
+        aluno:[['aluno.html','Minha Área'],['comunicados.html','Comunicados']]
       };
       const nav = u ? (menus[u.role]||[]) : [];
       return `<header class="header"><div class="nav container">
@@ -174,42 +232,20 @@
     },
     mountHeader(){
       const hdr=document.getElementById('hdr');
-      if(hdr){ hdr.innerHTML=A.headerHTML(); const b=document.getElementById('logoutBtn'); if(b) b.onclick=()=>{A.signOut(); location.href='index.html';}; }
+      if(hdr){
+        hdr.innerHTML=A.headerHTML();
+        const b=document.getElementById('logoutBtn');
+        if(b){ b.onclick=()=>{ A.signOut(); location.replace('index.html'); }; }
+      }
     },
 
-    // Export helpers
     download(filename, content, mime='text/plain'){
       const blob = new Blob([content], {type: mime});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click();
       setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
     },
-    exportCSVNotas(turmaId, disciplinaId){
-      const db=getDB();
-      const alunos = A.alunosByTurma(turmaId);
-      const discMap = Object.fromEntries(db.disciplinas.map(d=>[d.id,d.nome]));
-      const lines = [['Aluno','Disciplina','Avaliacao','Nota']];
-      for(const a of alunos){
-        const notas = db.notas.filter(n=>n.alunoId===a.id && n.disciplinaId===disciplinaId);
-        for(const n of notas){ lines.push([a.name, discMap[disciplinaId]||'-', n.avaliacao, n.valor]); }
-      }
-      const csv = lines.map(row=>row.map(x=>`"${String(x).replace('"','""')}"`).join(',')).join('\n');
-      A.download(`notas_${turmaId}_${disciplinaId}.csv`, csv, 'text/csv');
-    },
-    exportCSVPresencas(turmaId, disciplinaId){
-      const db=getDB();
-      const alunos = A.alunosByTurma(turmaId);
-      const discMap = Object.fromEntries(db.disciplinas.map(d=>[d.id,d.nome]));
-      const lines = [['Aluno','Disciplina','Data','Status','Justificativa']];
-      for(const a of alunos){
-        const pres = db.presencas.filter(p=>p.alunoId===a.id && p.disciplinaId===disciplinaId && p.turmaId===turmaId);
-        for(const p of pres){ lines.push([a.name, discMap[disciplinaId]||'-', p.dataISO, p.status, p.justificativa? (p.justificativa.status+': '+p.justificativa.motivo): '' ]); }
-      }
-      const csv = lines.map(row=>row.map(x=>`"${String(x).replace('"','""')}"`).join(',')).join('\n');
-      A.download(`presencas_${turmaId}_${disciplinaId}.csv`, csv, 'text/csv');
-    },
 
-    
     openBoletimAlunoPrint(alunoId){
       const db=getDB();
       const user = db.users.find(u=>u.id===alunoId);
@@ -222,7 +258,7 @@
         const dName = discMap[did];
         const m = A.calcMediaAlunoDisciplina(alunoId, did);
         const f = A.calcFreqAlunoDisciplina(alunoId, did);
-        const sit = A.situacaoAlunoDisciplina(alunoId, did); // {status, klass}
+        const sit = A.situacaoAlunoDisciplina(alunoId, did);
         const icon = sit.status==='Aprovado'?'✓':(sit.status==='Recuperação'?'!':'✕');
         const color = sit.klass==='ok' ? '#10b981' : (sit.klass==='warn' ? '#fb923c' : '#ef4444');
         return `<div class="box ${sit.klass}">
@@ -262,21 +298,18 @@
           <div class="brand"><span class="logo"></span> SchoolManager</div>
           <div><strong>Boletim (Resumo)</strong><div class="meta">${new Date().toLocaleString()}</div></div>
         </div>
-
         <div class="section">
           <div class="row" style="display:flex;gap:18px">
             <div><strong>Aluno:</strong> ${user.name}</div>
             <div><strong>Turma:</strong> ${turma? turma.nome+' ('+turma.turno+')' : '-'}</div>
           </div>
         </div>
-
         <div class="section">
           <h3 style="margin:10px 0 8px">Resumo por Disciplina</h3>
           <div class="grid">
             ${discList.map(d=>cardResumo(d.id)).join('')}
           </div>
         </div>
-
         <div style="margin-top:24px;text-align:right" class="no-print">
           <button onclick="window.print()" style="background:#c1121f;color:#fff;padding:10px 14px;border:none;border-radius:10px;cursor:pointer">Imprimir / Salvar como PDF</button>
         </div>
@@ -298,14 +331,14 @@
           const f=A.calcFreqAlunoDisciplina(a.id, did);
           const sit=A.situacaoAlunoDisciplina(a.id, did);
           return `<div style="border:1px solid #ddd;border-radius:12px;padding:10px">
-              <div style="display:flex;justify-content:space-between"><strong>${discMap[did]}</strong><span>${sit.status}</span></div>
+              <div style="display:flex;justify-content:space-between"><strong>${discMap[did]}</strong><span>${sit.status==='Aprovado'?'✓':(sit.status==='Recuperação'?'!':'✕')} ${sit.status}</span></div>
               <div style="font-size:12px;color:#555;margin:4px 0">Média: ${m??'-'} • Frequência: ${f}%</div>
               <div style="height:8px;background:#eee;border-radius:999px;overflow:hidden"><div style="height:100%;background:#c1121f;width:${f}%"></div></div>
             </div>`;
         }).join('');
         return `<section style="page-break-after:always">
           <h2 style="margin:0 0 8px">${a.name}</h2>
-          <div class="grid">${cards}</div>
+          <div style="display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))">${cards}</div>
         </section>`;
       }
       const html=`<!doctype html><html><head><meta charset="utf-8"><title>Boletim Turma ${turma.nome}</title>
@@ -330,19 +363,12 @@
     }
   };
 
-
-  // === v10 Toasts ===
-  function ensureToastWrap(){
-    let w=document.querySelector('.toast-wrap'); if(!w){ w=document.createElement('div'); w.className='toast-wrap'; document.body.appendChild(w); }
-    return w;
-  }
+  // Toasts
+  function ensureToastWrap(){ let w=document.querySelector('.toast-wrap'); if(!w){ w=document.createElement('div'); w.className='toast-wrap'; document.body.appendChild(w); } return w; }
   function showToast(msg, type='ok'){
-    const wrap=ensureToastWrap();
-    const el=document.createElement('div'); el.className='toast '+type;
-    const icon= type==='ok'?'✓':(type==='warn'?'!':'✕');
-    el.innerHTML = `<span class="icon">${icon}</span><span>${msg}</span>`;
-    wrap.appendChild(el);
-    setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(6px)'; el.style.transition='all .3s'; }, 3000);
+    const wrap=ensureToastWrap(); const el=document.createElement('div'); el.className='toast '+type;
+    const icon= type==='ok'?'✓':(type==='warn'?'!':'✕'); el.innerHTML = `<span class="icon">${icon}</span><span>${msg}</span>`;
+    wrap.appendChild(el); setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(6px)'; el.style.transition='all .3s'; }, 3000);
     setTimeout(()=>{ el.remove(); }, 3400);
   }
   A.toast = showToast;

@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Turmas</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
@@ -25,7 +28,7 @@
       </div>
     </div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['admin']); App.mountHeader();
     const table = document.getElementById('turmaTable');
@@ -35,10 +38,11 @@
         <tr><td>${t.nome}</td><td>${t.ano}</td><td>${t.turno}</td>
         <td style="text-align:right"><button data-id="${t.id}" class="btn ghost del">Excluir</button></td></tr>`).join('');
       table.innerHTML = `<tr><th>Nome</th><th>Ano</th><th>Turno</th><th></th></tr>${rows}`;
-      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.turmas.remove(b.dataset.id); draw(); });
+      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.turmas.remove(b.dataset.id); App.toast('Turma removida','ok'); draw(); });
     }
-    form.onsubmit=(e)=>{ e.preventDefault(); const d=new FormData(form); App.turmas.create(Object.fromEntries(d.entries())); form.reset(); draw(); };
+    form.onsubmit=(e)=>{ e.preventDefault(); const d=new FormData(form); App.turmas.create(Object.fromEntries(d.entries())); form.reset(); App.toast('Turma criada','ok'); draw(); };
     draw();
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>

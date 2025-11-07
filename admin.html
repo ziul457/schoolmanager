@@ -3,19 +3,22 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Admin</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
   <div class="container">
     <div class="grid cols-3">
-      <div class="card kpi"><div><div class="label">Usuários</div><div class="value" id="k1">0</div></div><span class="badge admin">Admin</span></div>
-      <div class="card kpi"><div><div class="label">Turmas</div><div class="value" id="k2">0</div></div><span class="badge prof">Prof</span></div>
-      <div class="card kpi"><div><div class="label">Disciplinas</div><div class="value" id="k3">0</div></div><span class="badge aluno">Aluno</span></div>
+      <div class="card kpi fade-in"><div><div class="label">Usuários</div><div class="value" id="k1">0</div></div><span class="badge admin">Admin</span></div>
+      <div class="card kpi fade-in"><div><div class="label">Turmas</div><div class="value" id="k2">0</div></div><span class="badge prof">Prof</span></div>
+      <div class="card kpi fade-in"><div><div class="label">Disciplinas</div><div class="value" id="k3">0</div></div><span class="badge aluno">Aluno</span></div>
     </div>
     <div class="grid cols-2" style="margin-top:16px">
-      <div class="card">
+      <div class="card slide-up">
         <h3 style="margin:0 0 10px">Ações Rápidas</h3>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <a class="btn" href="usuarios.html">Usuários</a>
@@ -24,18 +27,19 @@
           <a class="btn" href="comunicados.html">Comunicados</a>
         </div>
       </div>
-      <div class="card">
+      <div class="card slide-up">
         <h3 style="margin:0 0 10px">Sobre</h3>
-        <p>Gerencie estrutura acadêmica, comunicações e permissões.</p>
+        <p>Gerencie estrutura acadêmica, comunicações e permissões. Dados persistem via IndexedDB (compatível com GitHub Pages).</p>
       </div>
     </div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['admin']); App.mountHeader();
     document.getElementById('k1').textContent = App.listUsers().length;
     document.getElementById('k2').textContent = App.turmas.list().length;
     document.getElementById('k3').textContent = App.disciplinas.list().length;
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>

@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Usuários</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
@@ -44,7 +47,7 @@
       <table class="table" id="userTable"></table>
     </div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['admin']); App.mountHeader();
     const table = document.getElementById('userTable');
@@ -91,24 +94,24 @@
         </tr>`;
       }).join('');
       table.innerHTML = `<tr><th>Nome</th><th>Perfil</th><th>Senha</th><th>Ações</th></tr>${rows||''}`;
-      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.deleteUser(b.dataset.id); draw(); });
-      document.querySelectorAll('.pw').forEach(i=>i.onchange=()=>{ App.updateUser(i.dataset.id, { password:i.value }); });
+      document.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ App.deleteUser(b.dataset.id); App.toast('Usuário excluído','ok'); draw(); });
+      document.querySelectorAll('.pw').forEach(i=>i.onchange=()=>{ App.updateUser(i.dataset.id, { password:i.value }); App.toast('Senha alterada','ok'); });
     }
 
     form.onsubmit = (e)=>{
       e.preventDefault();
       const dataObj = Object.fromEntries(new FormData(form).entries());
-      // multi select values
       if(roleSel.value==='prof'){
         dataObj.profTurmas = Array.from(profTurmasSel.selectedOptions).map(o=>o.value);
-        if(!dataObj.disciplinaId){ alert('Selecione a matéria do professor.'); return; }
+        if(!dataObj.disciplinaId){ App.toast('Selecione a matéria do professor.','warn'); return; }
       }
-      if(roleSel.value==='aluno' && !dataObj.turmaId){ alert('Selecione a turma do aluno.'); return; }
-      App.createUser(dataObj);
+      if(roleSel.value==='aluno' && !dataObj.turmaId){ App.toast('Selecione a turma do aluno.','warn'); return; }
+      App.createUser(dataObj); App.toast('Usuário criado','ok');
       form.reset(); fillOptions(); draw();
     };
 
     draw();
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>

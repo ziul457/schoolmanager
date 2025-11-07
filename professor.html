@@ -3,8 +3,11 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>SchoolManager - Professor</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="styles.css?v=16.1"/>
 </head>
 <body>
   <div id="hdr"></div>
@@ -22,14 +25,11 @@
         <div><label>Nota</label><input name="valor" id="valor" type="number" min="0" max="10" step="0.1" required/></div>
         <button class="btn" type="submit">Lançar</button>
       </form>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn ghost" id="btnCSVNotas">Exportar Notas (CSV)</button>
-      </div>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h3 style="margin:0 0 10px">Marcar Presença (em lote)</h3>
-        <div class="small">P/F por aluno • Justificativas no painel</div>
+        <div class="small">P/F por aluno</div>
       </div>
       <form id="presForm" class="grid">
         <div class="grid cols-3">
@@ -40,17 +40,8 @@
         <div id="listaAlunos" class="card" style="max-height:300px;overflow:auto"></div>
         <div style="display:flex;gap:8px">
           <button class="btn" type="submit">Salvar Presenças</button>
-          <button class="btn ghost" type="button" id="btnCSVPres">Exportar Presenças (CSV)</button>
         </div>
       </form>
-    </div>
-
-    <div class="card" style="grid-column:1/-1">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0 0 10px">Justificativas de Faltas (pendentes)</h3>
-        <div class="small">Aprovar ou Recusar</div>
-      </div>
-      <div id="justList"></div>
     </div>
 
     <div class="card" style="grid-column:1/-1">
@@ -70,7 +61,7 @@
       <div id="recent"></div>
     </div>
   </div>
-  <script src="app.js"></script>
+  <script src="app.js?v=16.1"></script>
   <script>
     App.guard(['prof']); App.mountHeader();
     const user = App.currentUser();
@@ -79,11 +70,9 @@
     document.getElementById('discNota').value = discMap[profDiscId]||'-';
     document.getElementById('discPres').value = discMap[profDiscId]||'-';
 
-    // Turmas visíveis = turmas do professor (se definidas), senão todas
     const allTurmas = App.turmas.list();
     const visTurmas = (user.profTurmas && user.profTurmas.length) ? allTurmas.filter(t=>user.profTurmas.includes(t.id)) : allTurmas;
 
-    // Preencher selects
     const turmaNotaSel = document.getElementById('turmaNotaSel');
     const turmaPresSel = document.getElementById('turmaPresSel');
     const turmaBoletimSel = document.getElementById('turmaBoletimSel');
@@ -91,7 +80,6 @@
     const discBoletimSel = document.getElementById('discBoletimSel');
     discBoletimSel.innerHTML += Object.entries(discMap).map(([id,n])=>`<option value="${id}">${n}</option>`).join('');
 
-    // Notas: update alunos when turma changes
     const alunoNotaSel = document.getElementById('alunoNotaSel');
     function refreshAlunosNota(){
       const turmaId = turmaNotaSel.value;
@@ -111,7 +99,6 @@
       App.toast('Nota lançada!','ok');
     };
 
-    // Presenças em lote
     const listaAlunosDiv = document.getElementById('listaAlunos');
     function renderListaAlunos(){
       const turmaId = turmaPresSel.value;
@@ -145,42 +132,6 @@
       drawRecent();
     };
 
-    // Export CSV
-    document.getElementById('btnCSVNotas').onclick = ()=> App.exportCSVNotas(turmaNotaSel.value, profDiscId);
-    document.getElementById('btnCSVPres').onclick = ()=> App.exportCSVPresencas(turmaPresSel.value, profDiscId);
-
-    // Justificativas pendentes (da disciplina e turmas do professor)
-    function drawJustificativas(){
-      const pres = App.presencas.list().filter(p=> p.disciplinaId===profDiscId && (!user.profTurmas || user.profTurmas.includes(p.turmaId)));
-      const pend = pres.filter(p=> p.status==='F' && p.justificativa && p.justificativa.status==='pendente');
-      if(!pend.length){ document.getElementById('justList').innerHTML = '<div class="alert">Sem pendências.</div>'; return; }
-      const users = Object.fromEntries(App.listUsers().map(u=>[u.id,u.name]));
-      document.getElementById('justList').innerHTML = `<table class="table">
-        <tr><th>Aluno</th><th>Data</th><th>Motivo</th><th>Ação</th></tr>
-        ${pend.map(p=>`
-          <tr>
-            <td>${users[p.alunoId]||'?'}</td>
-            <td>${p.dataISO}</td>
-            <td>${p.justificativa.motivo}</td>
-            <td>
-              <button class="btn" data-id="${p.id}" data-act="aprovar">Aprovar</button>
-              <button class="btn ghost" data-id="${p.id}" data-act="recusar">Recusar</button>
-            </td>
-          </tr>`).join('')}
-      </table>`;
-      document.querySelectorAll('#justList button').forEach(b=> b.onclick = ()=>{
-        App.presencas.decidirJustificativa(b.dataset.id, b.dataset.act);
-        drawJustificativas(); drawRecent();
-      });
-    }
-
-    // Boletim da turma
-    document.getElementById('btnBoletimTurma').onclick = ()=> {
-      const turmaId = turmaBoletimSel.value;
-      const did = discBoletimSel.value||null;
-      App.openBoletimTurmaPrint(turmaId, did);
-    };
-
     function drawRecent(){
       const ns = App.notas.list().slice(-5).reverse();
       const ps = App.presencas.list().slice(-5).reverse();
@@ -192,11 +143,18 @@
             ${ns.map(n=>`<tr><td>${mapUser[n.alunoId]?.name||'?'}</td><td>${mapDisc[n.disciplinaId]||'?'}</td><td>${n.avaliacao}</td><td>${n.valor}</td></tr>`).join('')||'<tr><td colspan="4">Sem registros.</td></tr>'}
           </table></div>
           <div><h4>Presenças</h4><table class="table"><tr><th>Aluno</th><th>Disciplina</th><th>Data</th><th>Status</th></tr>
-            ${ps.map(p=>`<tr><td>${mapUser[p.alunoId]?.name||'?'}</td><td>${mapDisc[p.disciplinaId]||'?'}</td><td>${p.dataISO}</td><td>${p.status}${p.justificativa? ' ('+p.justificativa.status+')':''}</td></tr>`).join('')||'<tr><td colspan="4">Sem registros.</td></tr>'}
+            ${ps.map(p=>`<tr><td>${mapUser[p.alunoId]?.name||'?'}</td><td>${mapDisc[p.disciplinaId]||'?'}</td><td>${p.dataISO}</td><td>${p.status}</td></tr>`).join('')||'<tr><td colspan="4">Sem registros.</td></tr>'}
           </table></div>
         </div>`;
     }
-    drawRecent(); drawJustificativas();
+    drawRecent();
+    // PDF turma
+    document.getElementById('btnBoletimTurma').onclick = ()=>{
+      const turmaId = turmaBoletimSel.value;
+      const did = document.getElementById('discBoletimSel').value || null;
+      App.openBoletimTurmaPrint(turmaId, did);
+    };
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
   </script>
 </body>
 </html>
